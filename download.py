@@ -104,7 +104,7 @@ def handle_client(client_socket, client_address, save_name, now_range, index):
     try:
         client_socket.send(f"{start} {end} {index}".encode("utf-8"))
         file_size = struct.unpack("!Q", client_socket.recv(8))[0]
-        pbar = tqdm(total=file_size, unit="B", unit_scale=True, desc="Downloading from client")
+        pbar = tqdm(total=file_size, unit="B", unit_scale=True, desc=f"Downloading from client{index}")
         with open(f"{save_name}.part{index}", "wb") as f:
             while True:
                 data = client_socket.recv(BUFFERSIZE)
