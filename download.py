@@ -1,6 +1,7 @@
 from typing import Optional
 import os, shutil
 import socket
+import struct
 import requests
 from tqdm import tqdm
 
@@ -59,7 +60,7 @@ def download_multithreading(url: str, session: requests.Session,
         if local_size < 0:
             raise ValueError("start must be less than end")
 
-        pbar = tqdm(total=local_size, unit="B", unit_scale=True)
+        pbar = tqdm(total=local_size, unit="B", unit_scale=True, desc="Downloading from url")
         threads = []
         for i in range(num_threads):
             nowstart = local_size // num_threads * i
@@ -102,15 +103,19 @@ def handle_client(client_socket, client_address, save_name, now_range, index):
     start, end = now_range
     try:
         client_socket.send(f"{start} {end} {index}".encode("utf-8"))
+        file_size = struct.unpack("!Q", client_socket.recv(8))[0]
+        pbar = tqdm(total=file_size, unit="B", unit_scale=True, desc="Downloading from client")
         with open(f"{save_name}.part{index}", "wb") as f:
             while True:
-                # TODO: add tqdm here
                 data = client_socket.recv(BUFFERSIZE)
                 if not data:
                     break
+                pbar.update(len(data))
                 f.write(data)
+        pbar.close()
         client_socket.close()
     except:
+        pbar.close()
         client_socket.close()
         print(f"\n{client_address} download failed")
 
@@ -123,6 +128,8 @@ def client(client_socket, url: str, session: requests.Session,
         index = int(now_range[2])
         download_multithreading(url, session, start, end, True, save_name=f"{save_name}.part{index}",
                                 num_threads=num_threads, tmpdir=f".{save_name}.part{index}_tmp")
+        file_size = os.path.getsize(f"{save_name}.part{index}")
+        client_socket.send(struct.pack("!Q", file_size))
         with open(f"{save_name}.part{index}", "rb") as f:
             client_socket.sendall(f.read())
         client_socket.close()
